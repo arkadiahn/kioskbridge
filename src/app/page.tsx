@@ -46,31 +46,43 @@ export default function WebBridge() {
     }
   }, []);
 
-  // Detect user interaction: clicking inside the iframe causes the parent window to blur.
-  // Also reset the timer on any iframe navigation after the user has interacted.
+  // Detect user interaction via multiple signals, then start/reset the inactivity timer.
   useEffect(() => {
     if (!url || refreshSeconds <= 0) return;
     const iframe = iframeRef.current;
 
-    const handleBlur = () => {
-      // Window lost focus — user clicked inside the iframe
-      if (document.activeElement === iframe) {
-        interactedRef.current = true;
-        startTimer();
-      }
+    const markActive = () => {
+      interactedRef.current = true;
+      startTimer();
     };
 
+    // Mouse/touch/keyboard activity on the parent document (includes movement over the iframe)
+    document.addEventListener("mousemove", markActive);
+    document.addEventListener("pointerdown", markActive);
+    document.addEventListener("touchstart", markActive);
+    document.addEventListener("keydown", markActive);
+
+    // Clicking into the iframe blurs the parent window
+    const handleBlur = () => {
+      if (document.activeElement === iframe) {
+        markActive();
+      }
+    };
+    window.addEventListener("blur", handleBlur);
+
+    // iframe navigation after the user has interacted
     const handleLoad = () => {
-      // Only reset timer on iframe navigations after the user has interacted
       if (interactedRef.current) {
         startTimer();
       }
     };
-
-    window.addEventListener("blur", handleBlur);
     if (iframe) iframe.addEventListener("load", handleLoad);
 
     return () => {
+      document.removeEventListener("mousemove", markActive);
+      document.removeEventListener("pointerdown", markActive);
+      document.removeEventListener("touchstart", markActive);
+      document.removeEventListener("keydown", markActive);
       window.removeEventListener("blur", handleBlur);
       if (iframe) iframe.removeEventListener("load", handleLoad);
       if (timerRef.current) {
