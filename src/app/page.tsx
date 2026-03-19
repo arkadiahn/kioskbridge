@@ -6,6 +6,7 @@ export default function WebBridge() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const reenableTimerRef = useRef<NodeJS.Timeout | null>(null);
   const interactedRef = useRef(false);
   const [url, setUrl] = useState<string | null>(null);
   const [refreshSeconds, setRefreshSeconds] = useState<number>(0);
@@ -21,6 +22,19 @@ export default function WebBridge() {
       overlayRef.current.style.pointerEvents = "none";
     }
   }, []);
+
+  // Disable overlay to let events through, then re-enable after a short
+  // delay so we can detect the next gesture (e.g. continued scrolling).
+  const disableOverlayBriefly = useCallback(() => {
+    disableOverlay();
+    if (reenableTimerRef.current) {
+      clearTimeout(reenableTimerRef.current);
+    }
+    reenableTimerRef.current = setTimeout(() => {
+      enableOverlay();
+      reenableTimerRef.current = null;
+    }, 500);
+  }, [disableOverlay, enableOverlay]);
 
   const resetIframe = useCallback(() => {
     if (iframeRef.current && url) {
@@ -71,8 +85,8 @@ export default function WebBridge() {
     const markActive = () => {
       interactedRef.current = true;
       startTimer();
-      // Let subsequent events in this gesture pass through to the iframe
-      disableOverlay();
+      // Let events pass through to iframe, then re-enable to catch further gestures
+      disableOverlayBriefly();
     };
 
     // Overlay captures the start of any interaction gesture over the iframe
@@ -106,8 +120,11 @@ export default function WebBridge() {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
+      if (reenableTimerRef.current) {
+        clearTimeout(reenableTimerRef.current);
+      }
     };
-  }, [url, refreshSeconds, startTimer, disableOverlay, enableOverlay]);
+  }, [url, refreshSeconds, startTimer, disableOverlayBriefly, enableOverlay]);
 
   if (!url) {
     return (
