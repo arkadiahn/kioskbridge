@@ -5,16 +5,18 @@ import { useEffect, useRef, useState, useCallback } from "react";
 export default function WebBridge() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const interactedRef = useRef(false);
   const [url, setUrl] = useState<string | null>(null);
   const [refreshSeconds, setRefreshSeconds] = useState<number>(0);
 
   const resetIframe = useCallback(() => {
     if (iframeRef.current && url) {
+      interactedRef.current = false;
       iframeRef.current.src = url;
     }
   }, [url]);
 
-  const resetTimer = useCallback(() => {
+  const startTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -33,7 +35,6 @@ export default function WebBridge() {
 
     if (!website) return;
 
-    // Ensure the URL has a protocol
     const normalizedUrl = website.startsWith("http") ? website : `https://${website}`;
     setUrl(normalizedUrl);
 
@@ -45,23 +46,38 @@ export default function WebBridge() {
     }
   }, []);
 
-  // Start/reset the auto-refresh timer whenever the iframe loads a page
+  // Detect user interaction: clicking inside the iframe causes the parent window to blur.
+  // Also reset the timer on any iframe navigation after the user has interacted.
   useEffect(() => {
+    if (!url || refreshSeconds <= 0) return;
     const iframe = iframeRef.current;
-    if (!iframe || !url || refreshSeconds <= 0) return;
 
-    const handleLoad = () => {
-      resetTimer();
+    const handleBlur = () => {
+      // Window lost focus — user clicked inside the iframe
+      if (document.activeElement === iframe) {
+        interactedRef.current = true;
+        startTimer();
+      }
     };
 
-    iframe.addEventListener("load", handleLoad);
+    const handleLoad = () => {
+      // Only reset timer on iframe navigations after the user has interacted
+      if (interactedRef.current) {
+        startTimer();
+      }
+    };
+
+    window.addEventListener("blur", handleBlur);
+    if (iframe) iframe.addEventListener("load", handleLoad);
+
     return () => {
-      iframe.removeEventListener("load", handleLoad);
+      window.removeEventListener("blur", handleBlur);
+      if (iframe) iframe.removeEventListener("load", handleLoad);
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-  }, [url, refreshSeconds, resetTimer]);
+  }, [url, refreshSeconds, startTimer]);
 
   if (!url) {
     return (
