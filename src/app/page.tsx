@@ -5,11 +5,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 export default function WebBridge() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasNavigated = useRef(false);
   const [url, setUrl] = useState<string | null>(null);
   const [refreshSeconds, setRefreshSeconds] = useState<number>(0);
 
   const resetIframe = useCallback(() => {
     if (iframeRef.current && url) {
+      hasNavigated.current = false;
       iframeRef.current.src = url;
     }
   }, [url]);
@@ -51,8 +53,13 @@ export default function WebBridge() {
     if (!iframe || !url || refreshSeconds <= 0) return;
 
     const handleLoad = () => {
-      // Each time the iframe navigates (loads a new page), restart the timer.
-      // When the timer fires, the iframe resets back to the original URL.
+      if (!hasNavigated.current) {
+        // Skip the initial load — no interaction has happened yet
+        hasNavigated.current = true;
+        return;
+      }
+      // User navigated within the iframe — start the inactivity timer.
+      // When it fires, the iframe resets back to the original URL.
       resetTimer();
     };
 
